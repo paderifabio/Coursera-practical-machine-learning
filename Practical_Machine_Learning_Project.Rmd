@@ -1,0 +1,118 @@
+---
+title: "Practical Machine Learning"
+subtitle: "Final Project"
+author: "Fabio Paderi"
+date: "17/1/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr) 
+library(ggplot2)
+library(caret)
+library(e1071)
+library(randomForest)
+knitr::opts_chunk$set(echo = TRUE,  warning=FALSE, message = FALSE, comment=NA)
+```
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).  
+
+  
+          The goal of this project is to predict the manner in which six participants did their exercise.
+
+
+### Load Data
+
+We are going to load only the training set, we leave test set as a Validation set in final phase
+```{r, cache=TRUE}
+training <- read.csv("pml-training.csv", header = TRUE, na.strings=c("NA","#DIV/0!",""))
+```
+
+### Preparing Data
+```{r, warning=FALSE, message = FALSE, comment=NA, cache=TRUE}
+
+## First we define a function to compute the proportion of missing data for each
+## variable, then we delete variables with more than 60% missing data
+
+percent_miss <- function(x) {
+      sum(is.na(x))/length(x)
+}
+
+too.miss <- as.numeric(apply(training, 2, percent_miss) > 0.6)
+training <- training[, too.miss == 0]
+
+nZeroVar <- nearZeroVar(training, saveMetrics = TRUE)
+training <- training[, nZeroVar$nzv == FALSE]
+
+## removing other not useful variables
+training$X <- NULL 
+training$cvtd_timestamp <- NULL
+
+
+## defining a training and a test set
+index <- rbinom(dim(training)[1], 1, p = 0.7)
+
+training <- training[index == 1,]
+testing <- training[index == 0, ]
+
+## removing missing values from the outcome in the test set
+testing <- testing %>%
+      filter(!is.na(classe))
+
+```
+
+#### Decision tree
+
+```{r, cache=TRUE}
+library(rpart)
+
+mod1 <- rpart(classe ~., data = training, 
+              method = "class", control = rpart.control(cp = 0.0001))
+
+p1 <- predict(mod1, testing, type = "class")
+confusionMatrix(p1, testing$classe)
+```
+
+#### Support Vector Machine
+
+```{r, cache = TRUE}
+library(e1071)
+
+mod2 <- svm(classe ~., data = training, scale = TRUE)
+p2 <- predict(mod2, testing, type = "class")
+
+confusionMatrix(p2, testing$classe)
+```
+
+#### Random Forest
+
+```{r, cache=TRUE}
+library(randomForest)
+
+mod3 <- randomForest(classe ~., data = training, ntree = 200, mtry = 4)
+
+p3 <- predict(mod3, testing)
+
+confusionMatrix(p3, testing$classe)
+plot(mod3)
+
+```
+
+As we have found an algorithm which has an accuracy of 1, we decide to retain it and to apply to the validation set.
+
+Our final prediction for the 20 test samples are the following:
+
+```{r}
+
+validation <- read.csv("pml-testing.csv", header = TRUE,
+                       na.strings=c("NA","#DIV/0!",""))
+
+knitr::kable(t(predict(mod3, validation)))
+```
+
+
+
+
+
